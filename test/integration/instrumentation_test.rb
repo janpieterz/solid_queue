@@ -8,7 +8,10 @@ class InstrumentationTest < ActiveSupport::TestCase
 
     events = subscribed("dispatch_scheduled.solid_queue") do
       travel_to 2.days.from_now
-      dispatcher = SolidQueue::Dispatcher.new(polling_interval: 0.1, batch_size: 10).tap(&:start)
+      # Maintenance runs independently of the poller and can outlive stop,
+      # racing the fixture rollback. It isn't part of the event under test.
+      dispatcher = SolidQueue::Dispatcher.new(polling_interval: 0.1, batch_size: 10,
+        concurrency_maintenance: false, batch_maintenance: false).tap(&:start)
 
       wait_while_with_timeout!(3.seconds) { SolidQueue::ScheduledExecution.any? }
       dispatcher.stop
@@ -117,7 +120,7 @@ class InstrumentationTest < ActiveSupport::TestCase
     process = nil
 
     events = subscribed(/(register|deregister)_process\.solid_queue/) do
-      dispatcher = SolidQueue::Dispatcher.new.tap(&:start)
+      dispatcher = SolidQueue::Dispatcher.new(concurrency_maintenance: false, batch_maintenance: false).tap(&:start)
       wait_for_registered_processes(1, timeout: 3.second)
 
       process = SolidQueue::Process.last

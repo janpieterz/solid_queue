@@ -114,6 +114,32 @@ class SolidQueue::ClaimedExecutionTest < ActiveSupport::TestCase
     assert job.reload.ready?
   end
 
+  test "release all loads jobs while preserving the process scope" do
+    claims = 2.times.map { prepare_and_claim_job AddToBufferJob.perform_later(42) }
+    other_process = SolidQueue::Process.register(kind: "Worker", pid: 43, name: "other-worker")
+    other_claim = prepare_and_claim_job(AddToBufferJob.perform_later(43), process: other_process)
+
+    assert_difference -> { SolidQueue::ClaimedExecution.count }, -2 do
+      @process.claimed_executions.release_all
+    end
+
+    assert claims.all? { |claim| claim.job.reload.ready? }
+    assert other_claim.reload.job.claimed?
+  end
+
+  test "fail all loads jobs while preserving the process scope" do
+    claims = 2.times.map { prepare_and_claim_job AddToBufferJob.perform_later(42) }
+    other_process = SolidQueue::Process.register(kind: "Worker", pid: 43, name: "other-worker")
+    other_claim = prepare_and_claim_job(AddToBufferJob.perform_later(43), process: other_process)
+
+    assert_difference -> { SolidQueue::ClaimedExecution.count }, -2 do
+      @process.claimed_executions.fail_all_with(RuntimeError.new("worker stopped"))
+    end
+
+    assert claims.all? { |claim| claim.job.reload.failed? }
+    assert other_claim.reload.job.claimed?
+  end
+
   test "fail with error" do
     claimed_execution = prepare_and_claim_job AddToBufferJob.perform_later(42)
     job = claimed_execution.job

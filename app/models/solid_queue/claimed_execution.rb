@@ -45,7 +45,7 @@ module SolidQueue
 
       def release_all
         SolidQueue.instrument(:release_many_claimed) do |payload|
-          includes(:job).tap do |executions|
+          with_jobs.tap do |executions|
             executions.each(&:release)
 
             payload[:size] = executions.size
@@ -54,7 +54,7 @@ module SolidQueue
       end
 
       def fail_all_with(error)
-        includes(:job).tap do |executions|
+        with_jobs.tap do |executions|
           return if executions.empty?
 
           SolidQueue.instrument(:fail_many_claimed) do |payload|
@@ -77,6 +77,13 @@ module SolidQueue
       def discard_all_from_jobs(*)
         raise SolidQueue::Execution::UndiscardableError, "Can't discard jobs in progress"
       end
+
+      private
+        def with_jobs
+          # SQL Server's preloader extension depends on private Rails APIs that
+          # changed on Rails main. Load the belongs_to in the query instead.
+          sqlserver? ? eager_load(:job) : includes(:job)
+        end
     end
 
     def perform
