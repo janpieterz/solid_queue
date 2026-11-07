@@ -97,7 +97,7 @@ class SolidQueue::SemaphoreTest < ActiveSupport::TestCase
           # Create job and blocked execution bypassing after_create callbacks
           # to avoid re-entering Semaphore.wait
           uuid = SecureRandom.uuid
-          SolidQueue::Job.insert({
+          SolidQueue::Job.insert!({
             queue_name: "default",
             class_name: "NonOverlappingUpdateResultJob",
             concurrency_key: concurrency_key,
@@ -107,7 +107,7 @@ class SolidQueue::SemaphoreTest < ActiveSupport::TestCase
           })
           job_b_id = SolidQueue::Job.where(active_job_id: uuid).pick(:id)
 
-          SolidQueue::BlockedExecution.insert({
+          SolidQueue::BlockedExecution.insert!({
             job_id: job_b_id,
             queue_name: "default",
             concurrency_key: concurrency_key,

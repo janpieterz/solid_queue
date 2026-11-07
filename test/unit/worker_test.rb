@@ -182,7 +182,7 @@ class WorkerTest < ActiveSupport::TestCase
 
   test "polling queries are logged" do
     log = StringIO.new
-    polling_query = /SELECT .* FROM .solid_queue_ready_executions. WHERE .solid_queue_ready_executions...queue_name./
+    polling_query = /SELECT .* FROM .solid_queue_ready_executions.(?: WITH \([^)]+\))? WHERE .solid_queue_ready_executions...queue_name./
 
     with_active_record_logger(ActiveSupport::Logger.new(log)) do
       with_polling(silence: false) do
@@ -203,7 +203,7 @@ class WorkerTest < ActiveSupport::TestCase
       end
     end
 
-    assert_no_match /SELECT .* FROM .solid_queue_ready_executions. WHERE .solid_queue_ready_executions...queue_name./, log.string
+    assert_no_match /SELECT .* FROM .solid_queue_ready_executions.(?: WITH \([^)]+\))? WHERE .solid_queue_ready_executions...queue_name./, log.string
   end
 
   test "silencing polling queries when there's no Active Record logger" do

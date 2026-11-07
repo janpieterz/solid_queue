@@ -24,7 +24,7 @@ module SolidQueue
 
           def successfully_scheduled(jobs)
             jobs_by_id = jobs.index_by(&:id)
-            ScheduledExecution.where(job_id: jobs_by_id.keys).pluck(:job_id).map { |id| jobs_by_id[id] }
+            ScheduledExecution.where(job_id: jobs_by_id.keys).non_blocking_read.pluck(:job_id).map { |id| jobs_by_id[id] }
           end
       end
 

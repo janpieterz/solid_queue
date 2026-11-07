@@ -58,7 +58,8 @@ module SolidQueue
       end
 
       def prefixes
-        @prefixes ||= raw_queues.select { |queue| prefixed_name?(queue) }.map { |queue| relation.sanitize_sql_like(queue, "!").tr("*", "%") }
+        # SQL Server also treats opening brackets as LIKE wildcards.
+        @prefixes ||= raw_queues.select { |queue| prefixed_name?(queue) }.map { |queue| relation.sanitize_sql_like(queue, "!").gsub("[", "![").tr("*", "%") }
       end
 
       def exact_name?(queue)

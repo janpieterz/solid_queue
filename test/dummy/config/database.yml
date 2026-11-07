@@ -5,7 +5,15 @@
 #   gem "mysql2"
 #
 
-<% def database_name_from(name); ENV["TARGET_DB"]=="sqlite" ? "db/#{name}.sqlite3" : name; end %>
+<%
+  def database_name_from(name)
+    case ENV["TARGET_DB"]
+    when "sqlite" then "db/#{name}.sqlite3"
+    when "mssql" then "#{ENV.fetch('MSSQL_DATABASE_PREFIX', 'solid_queue_')}#{name}"
+    else name
+    end
+  end
+%>
 
 <% if ENV["TARGET_DB"] == "sqlite" %>
 default: &default
@@ -26,6 +34,15 @@ default: &default
   host: "127.0.0.1"
   port: 55432
   gssencmode: disable # https://github.com/ged/ruby-pg/issues/311
+
+<% elsif ENV["TARGET_DB"] == "mssql" %>
+default: &default
+  adapter: sqlserver
+  username: <%= ENV.fetch("MSSQL_USERNAME", "sa").inspect %>
+  password: <%= ENV.fetch("MSSQL_PASSWORD", "SolidQueue-Test-Password1!").inspect %>
+  host: <%= ENV.fetch("MSSQL_HOST", "127.0.0.1").inspect %>
+  port: <%= ENV.fetch("MSSQL_PORT", 14330) %>
+  pool: 20
 
 <% else %>
 default: &default

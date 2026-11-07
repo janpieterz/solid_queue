@@ -39,6 +39,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "mocha"
   spec.add_development_dependency "puma", "~> 7.0"
   spec.add_development_dependency "mysql2"
+  spec.add_development_dependency "activerecord-sqlserver-adapter", ">= 7.1"
   spec.add_development_dependency "pg"
   spec.add_development_dependency "sqlite3"
   spec.add_development_dependency "rubocop-rails-omakase"

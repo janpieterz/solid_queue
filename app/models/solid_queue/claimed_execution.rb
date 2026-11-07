@@ -28,8 +28,9 @@ module SolidQueue
         job_data = Array(job_ids).collect { |job_id| { job_id: job_id, process_id: process_id } }
 
         SolidQueue.instrument(:claim, process_id: process_id, job_ids: job_ids) do |payload|
-          insert_all!(job_data)
-          where(job_id: job_ids, process_id: process_id).load.tap do |claimed|
+          # SQL Server limits INSERT ... VALUES to 1,000 rows per statement.
+          job_data.each_slice(1_000) { |rows| insert_all!(rows) }
+          where(job_id: job_ids, process_id: process_id).non_blocking_read.load.tap do |claimed|
             block.call(claimed)
 
             payload[:size] = claimed.size
