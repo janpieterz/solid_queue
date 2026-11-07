@@ -35,16 +35,18 @@ module SolidQueue
     end
 
     def start
-      boot
-      run_start_hooks
+      Processes.without_signal_interruptions do
+        boot
+        run_start_hooks
 
-      start_processes
+        start_processes
 
-      if stopped?
-        shutdown
-      else
-        launch_maintenance_task
-        supervise
+        if stopped?
+          shutdown
+        else
+          launch_maintenance_task
+          supervise
+        end
       end
     end
 

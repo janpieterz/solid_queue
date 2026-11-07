@@ -43,7 +43,7 @@ module SolidQueue
       end
 
       def all_queues
-        relation.non_blocking_read.distinct_values_of(:queue_name)
+        discovery_relation.distinct_values_of(:queue_name)
       end
 
       def exact_names
@@ -53,8 +53,12 @@ module SolidQueue
       def prefixed_names
         if prefixes.empty? then []
         else
-          relation.non_blocking_read.where(([ "queue_name LIKE ? ESCAPE '!'" ] * prefixes.count).join(" OR "), *prefixes).distinct_values_of(:queue_name)
+          discovery_relation.where(([ "queue_name LIKE ? ESCAPE '!'" ] * prefixes.count).join(" OR "), *prefixes).distinct_values_of(:queue_name)
         end
+      end
+
+      def discovery_relation
+        SolidQueue.use_skip_locked ? relation.non_blocking_read : relation
       end
 
       def prefixes

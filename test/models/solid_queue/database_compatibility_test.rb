@@ -5,12 +5,25 @@ require "test_helper"
 class SolidQueue::DatabaseCompatibilityTest < ActiveSupport::TestCase
   test "bulk enqueue and claim more than one thousand jobs" do
     jobs = 1_001.times.map { |i| AddToBufferJob.new(i) }
+    inserts = Hash.new(0)
+    subscriber = ->(*args) do
+      sql = args.last.fetch(:sql)
+      if table = sql[/\bINSERT INTO [\["`]*(solid_queue_(?:jobs|claimed_executions))\b/, 1]
+        inserts[table] += 1
+      end
+    end
 
-    assert_equal jobs.size, SolidQueue::Job.enqueue_all(jobs)
-    claimed = SolidQueue::ReadyExecution.claim("*", jobs.size, 42)
+    claimed = nil
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      assert_equal jobs.size, SolidQueue::Job.enqueue_all(jobs)
+      claimed = SolidQueue::ReadyExecution.claim("*", jobs.size, 42)
+    end
 
     assert_equal jobs.map(&:provider_job_id).sort, claimed.map(&:job_id).sort
     assert_equal 0, SolidQueue::ReadyExecution.count
+    expected_inserts = SolidQueue::Record.connection.adapter_name == "SQLServer" ? 2 : 1
+    assert_equal expected_inserts, inserts["solid_queue_jobs"]
+    assert_equal expected_inserts, inserts["solid_queue_claimed_executions"]
   end
 
   test "job arguments and queue names preserve unicode and long text" do

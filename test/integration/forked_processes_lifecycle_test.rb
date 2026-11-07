@@ -99,6 +99,9 @@ class ForkedProcessesLifecycleTest < ActiveSupport::TestCase
 
     signal_process(@pid, :TERM, wait: 0.1.second)
     wait_for_jobs_to_finish_for(3.seconds)
+    # Let SIGCHLD arrive before querying results on the test's main thread;
+    # TinyTDS can otherwise cancel those queries while the supervisor exits.
+    wait_for_process_termination_with_timeout(@pid, timeout: 1.second)
 
     assert_completed_job_results("no pause")
     assert_completed_job_results("pause")
@@ -106,7 +109,6 @@ class ForkedProcessesLifecycleTest < ActiveSupport::TestCase
     assert_job_status(no_pause, :finished)
     assert_job_status(pause, :finished)
 
-    wait_for_process_termination_with_timeout(@pid, timeout: 1.second)
     assert_clean_termination
   end
 
@@ -121,6 +123,7 @@ class ForkedProcessesLifecycleTest < ActiveSupport::TestCase
 
     signal_process(@pid, :INT, wait: 0.1.second)
     wait_for_jobs_to_finish_for(3.second)
+    wait_for_process_termination_with_timeout(@pid, timeout: 1.second)
 
     assert_completed_job_results("no pause")
     assert_completed_job_results("pause")
@@ -128,7 +131,6 @@ class ForkedProcessesLifecycleTest < ActiveSupport::TestCase
     assert_job_status(no_pause, :finished)
     assert_job_status(pause, :finished)
 
-    wait_for_process_termination_with_timeout(@pid, timeout: 1.second)
     assert_clean_termination
   end
 

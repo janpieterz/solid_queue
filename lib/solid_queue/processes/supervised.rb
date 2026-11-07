@@ -28,7 +28,7 @@ module SolidQueue::Processes
       def create_fork(&block)
         fork do
           register_signal_handlers
-          block.call
+          SolidQueue::Processes.without_signal_interruptions(&block)
 
           # Exit skipping at-exit hooks and finalizers, like Puma's cluster
           # workers do: Ruby would finalize every object still alive in the

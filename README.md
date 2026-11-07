@@ -209,6 +209,8 @@ production:
 
 SQL Server uses `UPDLOCK`, `ROWLOCK`, and `READPAST` table hints for polling. `READCOMMITTEDLOCK` allows these reads to work with `READ_COMMITTED_SNAPSHOT` enabled too. Leave `use_skip_locked` enabled for concurrent workers; setting it to `false` uses ordinary blocking update locks. As with other databases, page or table locks can still cause waits. See Microsoft's [table hints documentation](https://learn.microsoft.com/en-us/sql/t-sql/queries/hints-transact-sql-table).
 
+With SQL Server, supervisors and forked workers run their processing loops on a background thread, leaving Ruby's main thread available for signals. This avoids a [TinyTDS 3 issue](https://github.com/rails-sqlserver/tiny_tds/issues/598) where signals, including child process exits, can cancel an in-progress query and return an empty result.
+
 To run the shared test suite against SQL Server, install FreeTDS (`brew install freetds` on macOS or `apt-get install freetds-dev` on Ubuntu), then run:
 
 ```sh

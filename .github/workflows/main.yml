@@ -50,7 +50,7 @@ jobs:
         ports:
           - 55432:5432
       mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: ${{ matrix.database == 'mssql' && 'mcr.microsoft.com/mssql/server:2022-latest' || '' }}
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "SolidQueue-Test-Password1!"

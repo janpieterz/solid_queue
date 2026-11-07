@@ -39,6 +39,17 @@ class SolidQueue::RecordLockingTest < ActiveSupport::TestCase
     pause&.destroy!
   end
 
+  test "disabling skip locked makes prefix queue discovery wait" do
+    assert_queue_discovery_waits_for_uncommitted_deletion("discovery_*")
+  end
+
+  test "disabling skip locked makes wildcard queue discovery with paused queues wait" do
+    pause = SolidQueue::Pause.create!(queue_name: "discovery_paused")
+    assert_queue_discovery_waits_for_uncommitted_deletion("*")
+  ensure
+    pause&.destroy!
+  end
+
   test "dispatchers skip locked scheduled executions without losing them" do
     jobs = 3.times.map { |i| SolidQueue::Job.enqueue(AddToBufferJob.new(i), scheduled_at: 1.minute.from_now) }
     travel_to 2.minutes.from_now
@@ -123,6 +134,31 @@ class SolidQueue::RecordLockingTest < ActiveSupport::TestCase
   end
 
   private
+    def assert_queue_discovery_waits_for_uncommitted_deletion(selector)
+      job = SolidQueue::Job.enqueue(AddToBufferJob.new(1).set(queue: "discovery_locked"))
+      started = Concurrent::Event.new
+      completed = Concurrent::Event.new
+      claimant = nil
+
+      with_locked_relation(SolidQueue::ReadyExecution.where(job_id: job.id), delete: true) do
+        SolidQueue.use_skip_locked = false
+        claimant = Thread.new do
+          SolidQueue::Record.connection_pool.with_connection do
+            started.set
+            SolidQueue::ReadyExecution.claim(selector, 1, 42).tap { completed.set }
+          end
+        end
+
+        assert started.wait(5), "Claimant did not start"
+        assert_not completed.wait(0.2), "Queue discovery should wait until the deletion commits"
+      end
+
+      assert_empty claimant.value
+      assert completed.set?
+    ensure
+      claimant.kill.join if claimant&.alive?
+    end
+
     def assert_queue_discovery_skips_uncommitted_deletion(selector)
       jobs = %w[ discovery_a discovery_b discovery_c ].map do |queue|
         SolidQueue::Job.enqueue(AddToBufferJob.new(queue).set(queue: queue))
