@@ -31,7 +31,10 @@ module SolidQueue
 
         def select_candidates(queue_relation, limit)
           # Force query execution here with #to_a to avoid unintended FOR UPDATE query executions
-          queue_relation.ordered.limit(limit).non_blocking_lock.select(:id, :job_id).to_a
+          # On SQL Server, include a non-indexed column to lock the base row too,
+          # so polls using different covering indexes cannot claim the same job.
+          columns = sqlserver? ? [ :id, :job_id, :created_at ] : [ :id, :job_id ]
+          queue_relation.ordered.limit(limit).non_blocking_lock.select(*columns).to_a
         end
 
         def lock_candidates(executions, process_id)
@@ -39,7 +42,7 @@ module SolidQueue
 
           SolidQueue::ClaimedExecution.claiming(executions.map(&:job_id), process_id) do |claimed|
             ids_to_delete = executions.index_by(&:job_id).values_at(*claimed.map(&:job_id)).map(&:id)
-            where(id: ids_to_delete).delete_all
+            delete_all_locked(ids_to_delete)
           end
         end
 

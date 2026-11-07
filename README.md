@@ -4,7 +4,7 @@ Solid Queue is a database-based queuing backend for [Active Job](https://edgegui
 
 In addition to regular job enqueuing and processing, Solid Queue supports delayed jobs, concurrency controls, recurring jobs, pausing queues, numeric priorities per job, priorities by queue order, and bulk enqueuing (`enqueue_all` for Active Job's `perform_all_later`).
 
-Solid Queue can be used with SQL databases such as MySQL, PostgreSQL, or SQLite, and it leverages the `FOR UPDATE SKIP LOCKED` clause, if available, to avoid blocking and waiting on locks when polling jobs. It relies on Active Job for retries, discarding, error handling, serialization, and delays, and it's compatible with Ruby on Rails's multi-threading.
+Solid Queue can be used with SQL databases such as MySQL, PostgreSQL, SQLite, or Microsoft SQL Server, and it uses non-blocking locking reads, if available, to avoid waiting on locks when polling jobs. It relies on Active Job for retries, discarding, error handling, serialization, and delays, and it's compatible with Ruby on Rails's multi-threading.
 
 ## Table of Contents
 
@@ -188,6 +188,40 @@ end
 ### High performance requirements
 
 Solid Queue was designed for the highest throughput when used with MySQL 8+, MariaDB 10.6+, or PostgreSQL 9.5+, as they support `FOR UPDATE SKIP LOCKED`. You can use it with older versions, but in that case, you might run into lock waits if you run multiple workers for the same queue. You can also use it with SQLite on smaller applications.
+
+### Microsoft SQL Server
+
+For SQL Server, add [activerecord-sqlserver-adapter](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter) to your application's Gemfile, using the version that matches your Rails major and minor version (for example, `~> 8.1` for Rails 8.1). Configure the queue database with `adapter: sqlserver`, then follow the normal installation steps above. SQL Server 2022 is tested in CI.
+
+```yaml
+production:
+  primary:
+    # Your application's database configuration
+  queue:
+    adapter: sqlserver
+    host: <%= ENV.fetch("MSSQL_HOST") %>
+    port: <%= ENV.fetch("MSSQL_PORT", 1433) %>
+    database: app_production_queue
+    username: <%= ENV.fetch("MSSQL_USERNAME") %>
+    password: <%= ENV.fetch("MSSQL_PASSWORD").inspect %>
+    migrations_paths: db/queue_migrate
+```
+
+SQL Server uses `UPDLOCK`, `ROWLOCK`, and `READPAST` table hints for polling. `READCOMMITTEDLOCK` allows these reads to work with `READ_COMMITTED_SNAPSHOT` enabled too. Leave `use_skip_locked` enabled for concurrent workers; setting it to `false` uses ordinary blocking update locks. As with other databases, page or table locks can still cause waits. See Microsoft's [table hints documentation](https://learn.microsoft.com/en-us/sql/t-sql/queries/hints-transact-sql-table).
+
+To run the shared test suite against SQL Server, install FreeTDS (`brew install freetds` on macOS or `apt-get install freetds-dev` on Ubuntu), then run:
+
+```sh
+export TARGET_DB=mssql BUNDLE_WITH=mssql
+bundle install
+docker compose --profile mssql up -d --wait mssql
+RAILS_ENV=test bin/rails db:setup
+bin/rails test
+```
+
+The SQL Server adapter is in the optional `mssql` bundle group, and its Docker service is behind the `mssql` profile. Other database contributors do not need FreeTDS or the SQL Server container. `TARGET_DB=mssql bin/setup` enables both for setup; keep `BUNDLE_WITH=mssql` set when running SQL Server tests afterward.
+
+The test configuration defaults to localhost port `14330`, user `sa`, and the development password in `docker-compose.yml`. To use an existing server, set `MSSQL_HOST`, `MSSQL_PORT`, `MSSQL_USERNAME`, and `MSSQL_PASSWORD` before running database setup and the tests. `MSSQL_DATABASE_PREFIX` defaults to `solid_queue_` and can isolate test databases on a shared server. SQL Server runs the same model, unit, and integration suites as the other engines, including concurrency tests on separate connections.
 
 ## Workers, dispatchers, and scheduler
 
@@ -445,7 +479,7 @@ There are several settings that control how Solid Queue works that you can set a
 
   **This is not used for errors raised within a job execution**. Errors happening in jobs are handled by Active Job's `retry_on` or `discard_on`, and ultimately will result in [failed jobs](#failed-jobs-and-retries). This is for errors happening within Solid Queue itself.
 
-- `use_skip_locked`: whether to use `FOR UPDATE SKIP LOCKED` when performing locking reads. This will be automatically detected in the future, and for now, you only need to set this to `false` if your database doesn't support it. For MySQL, that'd be versions < 8; for MariaDB, versions < 10.6; and for PostgreSQL, versions < 9.5. If you use SQLite, this has no effect, as writes are sequential.
+- `use_skip_locked`: whether to use `FOR UPDATE SKIP LOCKED` (or SQL Server's `READPAST` table hint) when performing locking reads. This will be automatically detected in the future, and for now, you only need to set this to `false` if your database doesn't support it. For MySQL, that'd be versions < 8; for MariaDB, versions < 10.6; and for PostgreSQL, versions < 9.5. If you use SQLite, this has no effect, as writes are sequential.
 - `process_heartbeat_interval`: the heartbeat interval that all processes will follow—defaults to 60 seconds.
 - `process_alive_threshold`: how long to wait until a process is considered dead after its last heartbeat—defaults to 5 minutes.
 - `fork_boot_timeout`: how long a forked process can take to finish booting before the supervisor replaces it—defaults to 5 minutes. It only applies in the default `fork` mode.

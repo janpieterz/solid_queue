@@ -4,4 +4,8 @@ source "https://rubygems.org"
 
 gem "railties", branch: "main", git: "https://github.com/rails/rails.git"
 
+group :mssql, optional: true do
+  gem "activerecord-sqlserver-adapter", branch: "main", git: "https://github.com/rails-sqlserver/activerecord-sqlserver-adapter.git"
+end
+
 gemspec path: "../"

@@ -5,4 +5,8 @@ source "https://rubygems.org"
 gem "railties", "~> 7.1.0"
 gem "json", "< 3"
 
+group :mssql, optional: true do
+  gem "activerecord-sqlserver-adapter", ">= 7.1"
+end
+
 gemspec path: "../"

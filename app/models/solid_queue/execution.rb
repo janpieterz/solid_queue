@@ -18,12 +18,37 @@ module SolidQueue
       end
 
       def create_all_from_jobs(jobs)
-        insert_all execution_data_from_jobs(jobs)
+        rows = execution_data_from_jobs(jobs)
+        if connection_pool.with_connection(&:supports_insert_on_duplicate_skip?)
+          insert_all rows
+        else
+          # Older SQL Server adapters don't implement insert_all's duplicate skipping.
+          transaction do
+            rows.each do |attributes|
+              create_or_find_by!(job_id: attributes.fetch(:job_id)) do |execution|
+                execution.assign_attributes(attributes)
+              end
+            end
+          end
+        end
       end
 
       def execution_data_from_jobs(jobs)
         jobs.collect do |job|
           attributes_from_job(job).merge(job_id: job.id)
+        end
+      end
+
+      # These rows have already been locked by this transaction. SQL Server can
+      # scan other rows while deleting them, so skip locks held by other pollers.
+      def delete_all_locked(ids)
+        if sqlserver?
+          statement = Arel::DeleteManager.new
+            .from(Arel.sql("#{quoted_table_name} WITH (ROWLOCK, READPAST, READCOMMITTEDLOCK)"))
+            .where(arel_table[:id].in(ids))
+          connection_pool.with_connection { |connection| connection.delete(statement) }
+        else
+          where(id: ids).delete_all
         end
       end
 

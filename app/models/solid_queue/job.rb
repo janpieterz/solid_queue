@@ -65,8 +65,9 @@ module SolidQueue
 
         def create_all_from_active_jobs(active_jobs)
           job_rows = active_jobs.map { |job| attributes_from_active_job(job) }
-          insert_all(job_rows)
-          where(active_job_id: active_jobs.map(&:job_id)).order(id: :asc)
+          # SQL Server limits INSERT ... VALUES to 1,000 rows per statement.
+          job_rows.each_slice(1_000) { |rows| insert_all!(rows) }
+          where(active_job_id: active_jobs.map(&:job_id)).non_blocking_read.order(id: :asc)
         end
 
         def attributes_from_active_job(active_job)

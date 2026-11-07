@@ -30,7 +30,7 @@ jobs:
         - 3.3
         - 3.4
         - 4.0
-        database: [ mysql, postgres, sqlite ]
+        database: [ mysql, postgres, sqlite, mssql ]
         gemfile: [ rails_7_1, rails_7_2, rails_8_0, rails_8_1, rails_main ]
         exclude:
           - ruby-version: "3.2"
@@ -49,13 +49,27 @@ jobs:
           POSTGRES_HOST_AUTH_METHOD: "trust"
         ports:
           - 55432:5432
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "SolidQueue-Test-Password1!"
+        ports:
+          - 14330:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SolidQueue-Test-Password1!' -C -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 5s --health-timeout 5s --health-retries 30
     env:
       TARGET_DB: ${{ matrix.database }}
+      BUNDLE_WITH: ${{ matrix.database == 'mssql' && 'mssql' || '' }}
       BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/${{ matrix.gemfile }}.gemfile
       RAILS_ENV: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install FreeTDS
+        if: matrix.database == 'mssql'
+        run: sudo apt-get update && sudo apt-get install -y freetds-dev
       - name: Setup Ruby and install gems
         uses: ruby/setup-ruby@v1
         with:
@@ -70,6 +84,11 @@ jobs:
           bin/rails db:setup
       - name: Run tests
         run: bin/rails test
+      - name: Test SQL Server snapshot reads
+        if: matrix.database == 'mssql'
+        run: |
+          docker exec ${{ job.services.mssql.id }} /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SolidQueue-Test-Password1!' -C -b -Q 'ALTER DATABASE [solid_queue_test_queue] SET READ_COMMITTED_SNAPSHOT ON'
+          bin/rails test test/models/solid_queue/record_locking_test.rb test/models/solid_queue/database_compatibility_test.rb
       - name: Upload logs on failure
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

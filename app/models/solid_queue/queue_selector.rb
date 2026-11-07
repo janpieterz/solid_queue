@@ -43,7 +43,7 @@ module SolidQueue
       end
 
       def all_queues
-        relation.distinct_values_of(:queue_name)
+        relation.non_blocking_read.distinct_values_of(:queue_name)
       end
 
       def exact_names
@@ -53,12 +53,13 @@ module SolidQueue
       def prefixed_names
         if prefixes.empty? then []
         else
-          relation.where(([ "queue_name LIKE ? ESCAPE '!'" ] * prefixes.count).join(" OR "), *prefixes).distinct_values_of(:queue_name)
+          relation.non_blocking_read.where(([ "queue_name LIKE ? ESCAPE '!'" ] * prefixes.count).join(" OR "), *prefixes).distinct_values_of(:queue_name)
         end
       end
 
       def prefixes
-        @prefixes ||= raw_queues.select { |queue| prefixed_name?(queue) }.map { |queue| relation.sanitize_sql_like(queue, "!").tr("*", "%") }
+        # SQL Server also treats opening brackets as LIKE wildcards.
+        @prefixes ||= raw_queues.select { |queue| prefixed_name?(queue) }.map { |queue| relation.sanitize_sql_like(queue, "!").gsub("[", "![").tr("*", "%") }
       end
 
       def exact_name?(queue)

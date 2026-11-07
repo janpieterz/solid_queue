@@ -76,7 +76,7 @@ class DispatcherTest < ActiveSupport::TestCase
 
   test "polling queries are logged" do
     log = StringIO.new
-    polling_query = /SELECT .* FROM .solid_queue_scheduled_executions. WHERE/
+    polling_query = /SELECT .* FROM .solid_queue_scheduled_executions.(?: WITH \([^)]+\))? WHERE/
 
     with_active_record_logger(ActiveSupport::Logger.new(log)) do
       with_polling(silence: false) do
@@ -99,7 +99,7 @@ class DispatcherTest < ActiveSupport::TestCase
       end
     end
 
-    assert_no_match /SELECT .* FROM .solid_queue_scheduled_executions. WHERE/, log.string
+    assert_no_match /SELECT .* FROM .solid_queue_scheduled_executions.(?: WITH \([^)]+\))? WHERE/, log.string
   end
 
   test "silencing polling queries when there's no Active Record logger" do
