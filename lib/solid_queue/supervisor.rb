@@ -9,16 +9,18 @@ module SolidQueue
 
     class << self
       def start(**options)
-        SolidQueue.supervisor = true
-        configuration = Configuration.new(**options)
+        Processes.without_signal_interruptions do
+          SolidQueue.supervisor = true
+          configuration = Configuration.new(**options)
 
-        if configuration.valid?
-          configuration.warnings.full_messages.each { |warning| SolidQueue.logger.warn(warning) }
+          if configuration.valid?
+            configuration.warnings.full_messages.each { |warning| SolidQueue.logger.warn(warning) }
 
-          klass = configuration.mode.fork? ? ForkSupervisor : AsyncSupervisor
-          klass.new(configuration).tap(&:start)
-        else
-          abort configuration.errors.full_messages.join("\n") + "\nExiting..."
+            klass = configuration.mode.fork? ? ForkSupervisor : AsyncSupervisor
+            klass.new(configuration).tap(&:start)
+          else
+            abort configuration.errors.full_messages.join("\n") + "\nExiting..."
+          end
         end
       end
     end
