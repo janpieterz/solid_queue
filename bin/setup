@@ -8,8 +8,26 @@ else
   DOCKER_COMPOSE_CMD="docker-compose"
 fi
 
+if [ "${TARGET_DB:-}" = "mssql" ]; then
+  DOCKER_COMPOSE_CMD="$DOCKER_COMPOSE_CMD --profile mssql"
+  export BUNDLE_WITH="${BUNDLE_WITH:+$BUNDLE_WITH:}mssql"
+fi
+
 $DOCKER_COMPOSE_CMD up -d --remove-orphans
 $DOCKER_COMPOSE_CMD ps
+
+if [ "${TARGET_DB:-}" = "mssql" ]; then
+  mssql_container=$($DOCKER_COMPOSE_CMD ps -q mssql)
+  for attempt in {1..60}; do
+    mssql_health=$(docker inspect --format '{{.State.Health.Status}}' "$mssql_container")
+    [ "$mssql_health" = "healthy" ] && break
+    if [ "$mssql_health" = "unhealthy" ] || [ "$attempt" = 60 ]; then
+      echo "SQL Server did not become healthy" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
 
 bundle
 

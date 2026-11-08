@@ -82,13 +82,17 @@ class ActiveSupport::TestCase
   end
 
   def run(...)
-    # Rails 8.1.dev changed default logging levels
-    if defined?(with_debug_event_reporting)
-      with_debug_event_reporting do
+    # Test-side queries need the same protection as process queries: a child
+    # exiting during an assertion must not cancel that assertion's SQL.
+    SolidQueue::Processes.without_signal_interruptions do
+      # Rails 8.1.dev changed default logging levels
+      if defined?(with_debug_event_reporting)
+        with_debug_event_reporting do
+          super
+        end
+      else
         super
       end
-    else
-      super
     end
   end
 
@@ -98,12 +102,15 @@ class ActiveSupport::TestCase
     rescue Timeout::Error
     end
 
-    def wait_while_with_timeout!(timeout, &block)
-      Timeout.timeout(timeout) do
-        skip_active_record_query_cache do
-          while block.call
-            sleep 0.05
-          end
+    def wait_while_with_timeout!(timeout, interval: 0.05, &block)
+      deadline = SolidQueue::Timer.monotonic_time_now + timeout
+
+      # Check between queries instead of raising asynchronously inside a driver
+      # call, which can leave a shared test connection unusable.
+      skip_active_record_query_cache do
+        while block.call
+          raise Timeout::Error if SolidQueue::Timer.monotonic_time_now >= deadline
+          sleep interval
         end
       end
     end
@@ -147,11 +154,6 @@ class ActiveSupport::TestCase
     # Similar to other helper methods in this file but waits *for* a condition
     # instead of *while* it is true.
     def wait_for(timeout: 1.second, interval: 0.05)
-      Timeout.timeout(timeout) do
-        loop do
-          break if skip_active_record_query_cache { yield }
-          sleep interval
-        end
-      end
+      wait_while_with_timeout!(timeout, interval: interval) { !yield }
     end
 end

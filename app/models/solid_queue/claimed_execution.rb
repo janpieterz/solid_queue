@@ -28,8 +28,13 @@ module SolidQueue
         job_data = Array(job_ids).collect { |job_id| { job_id: job_id, process_id: process_id } }
 
         SolidQueue.instrument(:claim, process_id: process_id, job_ids: job_ids) do |payload|
-          insert_all!(job_data)
-          where(job_id: job_ids, process_id: process_id).load.tap do |claimed|
+          if sqlserver?
+            # SQL Server limits INSERT ... VALUES to 1,000 rows per statement.
+            job_data.each_slice(1_000) { |rows| insert_all!(rows) }
+          else
+            insert_all!(job_data)
+          end
+          where(job_id: job_ids, process_id: process_id).non_blocking_read.load.tap do |claimed|
             block.call(claimed)
 
             payload[:size] = claimed.size
@@ -40,7 +45,7 @@ module SolidQueue
 
       def release_all
         SolidQueue.instrument(:release_many_claimed) do |payload|
-          includes(:job).tap do |executions|
+          with_jobs.tap do |executions|
             executions.each(&:release)
 
             payload[:size] = executions.size
@@ -49,7 +54,7 @@ module SolidQueue
       end
 
       def fail_all_with(error)
-        includes(:job).tap do |executions|
+        with_jobs.tap do |executions|
           return if executions.empty?
 
           SolidQueue.instrument(:fail_many_claimed) do |payload|
@@ -72,6 +77,13 @@ module SolidQueue
       def discard_all_from_jobs(*)
         raise SolidQueue::Execution::UndiscardableError, "Can't discard jobs in progress"
       end
+
+      private
+        def with_jobs
+          # SQL Server's preloader extension depends on private Rails APIs that
+          # changed on Rails main. Load the belongs_to in the query instead.
+          sqlserver? ? eager_load(:job) : includes(:job)
+        end
     end
 
     def perform

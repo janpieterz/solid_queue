@@ -45,7 +45,15 @@ module SolidQueue
       end
 
       def create_or_update_all(tasks)
-        if supports_insert_conflict_target?
+        if !connection_pool.with_connection(&:supports_insert_on_duplicate_update?)
+          # Rails 7.1's SQL Server adapter has no bulk upsert support.
+          transaction do
+            tasks.each do |task|
+              attributes = task.attributes_for_upsert
+              create_or_find_by!(key: task.key) { |record| record.assign_attributes(attributes) }.update!(attributes)
+            end
+          end
+        elsif supports_insert_conflict_target?
           # PostgreSQL fails and aborts the current transaction when it hits a duplicate key conflict
           # during two concurrent INSERTs for the same value of an unique index. We need to explicitly
           # indicate unique_by to ignore duplicate rows by this value when inserting

@@ -22,4 +22,7 @@ end
 
 appraise "rails-main" do
   gem "railties", github: "rails/rails", branch: "main"
+  group :mssql, optional: true do
+    gem "activerecord-sqlserver-adapter", github: "rails-sqlserver/activerecord-sqlserver-adapter", branch: "main"
+  end
 end

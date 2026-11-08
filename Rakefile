@@ -19,7 +19,7 @@ class TestHelpers < Rake::TaskLib
   end
 
   def define
-    desc "Run tests for all databases (mysql, postgres, sqlite)"
+    desc "Run tests for all databases (mysql, postgres, sqlite, mssql)"
     task :test do
       @databases.each { |database| run_test_for_database(database) }
     end
@@ -37,9 +37,11 @@ class TestHelpers < Rake::TaskLib
   private
 
   def run_test_for_database(database)
-    sh("TARGET_DB=#{database} bin/setup")
-    sh("TARGET_DB=#{database} bin/rails test")
+    environment = "TARGET_DB=#{database}"
+    environment += " BUNDLE_WITH=mssql" if database == "mssql"
+    sh("#{environment} bin/setup")
+    sh("#{environment} bin/rails test")
   end
 end
 
-TestHelpers.new(%w[ mysql postgres sqlite ])
+TestHelpers.new(%w[ mysql postgres sqlite mssql ])

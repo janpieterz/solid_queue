@@ -37,6 +37,9 @@ GEM
       activemodel (= 7.1.5.2)
       activesupport (= 7.1.5.2)
       timeout (>= 0.4.0)
+    activerecord-sqlserver-adapter (7.1.12)
+      activerecord (~> 7.1.1)
+      tiny_tds
     activesupport (7.1.5.2)
       base64
       benchmark (>= 0.3)
@@ -197,6 +200,12 @@ GEM
     stringio (3.1.2)
     thor (1.3.2)
     timeout (0.4.3)
+    tiny_tds (3.4.1)
+      bigdecimal (>= 2.0.0)
+    tiny_tds (3.4.1-aarch64-linux-gnu)
+      bigdecimal (>= 2.0.0)
+    tiny_tds (3.4.1-x86_64-linux-gnu)
+      bigdecimal (>= 2.0.0)
     traces (0.18.2)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
@@ -215,6 +224,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  activerecord-sqlserver-adapter (>= 7.1)
   appraisal
   async (>= 2.24)
   debug (~> 1.9)
