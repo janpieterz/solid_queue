@@ -90,7 +90,9 @@ class SolidQueue::RecordLockingTest < ActiveSupport::TestCase
           start.wait(5)
           claimed_ids = []
           loop do
-            claimed = SolidQueue::ReadyExecution.claim(i.even? ? "*" : "background", 3, i + 1)
+            claimed = with_deadlock_retries do
+              SolidQueue::ReadyExecution.claim(i.even? ? "*" : "background", 3, i + 1)
+            end
             break if claimed.empty?
             claimed_ids.concat(claimed.map(&:job_id))
           end
@@ -105,7 +107,13 @@ class SolidQueue::RecordLockingTest < ActiveSupport::TestCase
     assert_equal 24, SolidQueue::ClaimedExecution.count
     assert_equal 0, SolidQueue::ReadyExecution.count
   ensure
-    workers&.each { |worker| worker.kill.join if worker.alive? }
+    workers&.each do |worker|
+      # Let in-flight queries finish even if another worker failed; killing
+      # them can return a corrupted connection to the next test.
+      worker.join
+    rescue StandardError
+      # Thread#value above already propagates the worker failure.
+    end
   end
 
   test "disabling skip locked waits for the locked row" do
@@ -134,6 +142,24 @@ class SolidQueue::RecordLockingTest < ActiveSupport::TestCase
   end
 
   private
+    def with_deadlock_retries
+      deadlock_errors = [ ActiveRecord::Deadlocked ]
+      deadlock_errors << ActiveRecord::DeadlockVictim if defined?(ActiveRecord::DeadlockVictim)
+      attempts = 0
+
+      begin
+        attempts += 1
+        yield
+      rescue *deadlock_errors
+        # Different polling indexes can deadlock during deletion even with
+        # SKIP LOCKED. Retry the rolled-back claim, as a replacement worker
+        # would, while still checking for lost or duplicate claims below.
+        raise if attempts >= 5
+        sleep rand(0.01..0.05)
+        retry
+      end
+    end
+
     def assert_queue_discovery_waits_for_uncommitted_deletion(selector)
       job = SolidQueue::Job.enqueue(AddToBufferJob.new(1).set(queue: "discovery_locked"))
       started = Concurrent::Event.new
